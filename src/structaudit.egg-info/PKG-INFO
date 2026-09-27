@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: structaudit
+Version: 0.1.0
+Requires-Dist: pydantic>=2
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: pandas
+Requires-Dist: pyarrow
+Requires-Dist: mdit-py-plugins
+Requires-Dist: pyyaml

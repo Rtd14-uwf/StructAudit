@@ -1,0 +1,11 @@
+# Candidate ranking weights.
+# s(c) = w_rule*s_rule + w_target*s_target + w_parse*s_parse
+#        + w_scope*s_scope + w_specificity*s_specificity
+ranking:
+  weights:
+    rule: 0.30
+    target: 0.25
+    parse: 0.20
+    scope: 0.15
+    specificity: 0.10
+  top_k_warning_budget: 5

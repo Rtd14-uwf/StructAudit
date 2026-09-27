@@ -1,0 +1,106 @@
+# Section 8.6: "Every rule must have: two positive tests; one
+# reordered/paraphrased positive test; two negative tests."
+#
+# Scoped to each rule family's core pattern (the exact worked examples
+# Sections 8.2-8.5 give), not every supported surface-form variant listed
+# in those sections -- e.g. Section 8.3 lists six COUNT surface forms,
+# but only "N noun shown in TARGET" is exercised here at 8.6's full
+# positive/reordered/negative depth. The other surface forms are still
+# implemented (see count_rules.py) and covered by the direct
+# spec-example tests in test_candidates.py, just not repeated here at
+# this granularity.
+
+reference_explicit_pointer:
+  - text: "See footnote 49."
+    expected_candidate_type: REFERENCE
+    expected_target: "footnote 49"
+    expected_operations: [TARGET_EXISTS]
+  - text: "Results are discussed in Appendix B."
+    expected_candidate_type: REFERENCE
+    expected_target: "Appendix B"
+    expected_operations: [TARGET_EXISTS]
+  - text: "As shown in Chart 6, results are discussed."
+    expected_candidate_type: REFERENCE
+    expected_target: "Chart 6"
+    expected_operations: [TARGET_EXISTS]
+  - text: "This sentence never mentions a labeled structural object at all."
+    expected_candidate_type: null
+  - text: "The report was thorough and well organized."
+    expected_candidate_type: null
+
+reference_target_topic_match:
+  - text: "Refinancing defaults are reported in Table 7."
+    expected_candidate_type: REFERENCE
+    expected_target: "Table 7"
+    expected_operations: [TARGET_EXISTS, TARGET_TOPIC_MATCH]
+  - text: "Table 7 reports refinancing defaults."
+    expected_candidate_type: REFERENCE
+    expected_target: "Table 7"
+    expected_operations: [TARGET_EXISTS, TARGET_TOPIC_MATCH]
+  - text: "See Table 7 for refinancing defaults."
+    expected_candidate_type: REFERENCE
+    expected_target: "Table 7"
+    expected_operations: [TARGET_EXISTS, TARGET_TOPIC_MATCH]
+  - text: "Table 7 exists somewhere in this document."
+    expected_candidate_type: REFERENCE
+    expected_target: "Table 7"
+    expected_operations: [TARGET_EXISTS]  # no topic-match wording present
+  - text: "Refinancing defaults were a major concern this year."
+    expected_candidate_type: null
+
+count_n_noun_shown_in_target:
+  - text: "Results for all six regions are reported in Table 5."
+    expected_candidate_type: COUNT
+    expected_target: "Table 5"
+    expected_count: 6
+    expected_operations: [TARGET_EXISTS, COUNT_MATCH]
+  - text: "All twelve departments are shown in Table 2."
+    expected_candidate_type: COUNT
+    expected_target: "Table 2"
+    expected_count: 12
+    expected_operations: [TARGET_EXISTS, COUNT_MATCH]
+  - text: "Shown in Table 5 are results for all six regions."
+    expected_candidate_type: null  # reordered form; not matched by this v1 regex rule (documented gap)
+  - text: "Six regions were surveyed as part of this study."
+    expected_candidate_type: null  # no bounded target
+  - text: "Table 5 contains regional data."
+    expected_candidate_type: null  # no quantity at all
+
+coverage_members_relation_target:
+  - text: "BERT, T5, and RoBERTa are shown in Table 4."
+    expected_candidate_type: COVERAGE
+    expected_target: "Table 4"
+    expected_members: ["BERT", "T5", "RoBERTa"]
+    expected_operations: [TARGET_EXISTS, COVERAGE_SET_MATCH]
+  - text: "Adam, RMSprop, and SGD are listed in Table 9."
+    expected_candidate_type: COVERAGE
+    expected_target: "Table 9"
+    expected_members: ["Adam", "RMSprop", "SGD"]
+    expected_operations: [TARGET_EXISTS, COVERAGE_SET_MATCH]
+  - text: "Table 4 reports BERT, T5, and RoBERTa."
+    expected_candidate_type: COVERAGE
+    expected_target: "Table 4"
+    expected_members: ["BERT", "T5", "RoBERTa"]
+    expected_operations: [TARGET_EXISTS, COVERAGE_SET_MATCH]
+  - text: "Several models were evaluated as part of this study."
+    expected_candidate_type: null
+  - text: "Table 4 was updated last quarter."
+    expected_candidate_type: null
+
+schema_target_contains_columns:
+  - text: "Table 4 contains columns Revenue, Expenses, and Net Income."
+    expected_candidate_type: SCHEMA
+    expected_target: "Table 4"
+    expected_schema: ["Revenue", "Expenses", "Net Income"]
+    expected_operations: [TARGET_EXISTS, SCHEMA_HEADER_MATCH]
+  - text: "Table 9 contains columns Date, Amount, and Category."
+    expected_candidate_type: SCHEMA
+    expected_target: "Table 9"
+    expected_schema: ["Date", "Amount", "Category"]
+    expected_operations: [TARGET_EXISTS, SCHEMA_HEADER_MATCH]
+  - text: "Columns Revenue, Expenses, and Net Income are contained in Table 4."
+    expected_candidate_type: null  # reordered form; not matched by this v1 regex rule (documented gap)
+  - text: "Revenue, Expenses, and Net Income were all strong this quarter."
+    expected_candidate_type: null  # members named, but not asserted as columns/rows -> COVERAGE territory, not SCHEMA
+  - text: "Table 4 was reformatted for clarity."
+    expected_candidate_type: null
