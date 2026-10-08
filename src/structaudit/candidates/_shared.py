@@ -32,6 +32,17 @@ def split_members(member_text: str) -> list[str]:
     return [m.strip() for m in member_text.split(",") if m.strip()]
 
 
+NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+}
+NUMBER = r"(\d+|" + "|".join(NUMBER_WORDS) + r")"
+
+def to_int(number_text: str) -> int:
+    number_text = number_text.lower()
+    return NUMBER_WORDS.get(number_text, None) or int(number_text)
+
+
 class NonOverlappingMatches:
     """Tracks match spans across multiple regex passes over the same text,
     so later patterns can skip a span already claimed by an earlier one.

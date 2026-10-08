@@ -10,36 +10,25 @@ from __future__ import annotations
 
 import re
 
-from structaudit.candidates._shared import TARGET_GROUP, NonOverlappingMatches
+from structaudit.candidates._shared import NUMBER, TARGET_GROUP, NonOverlappingMatches, to_int
 from structaudit.core import CandidateType, OperationType, StructuralCandidate
-
-_NUMBER_WORDS = {
-    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
-}
-_NUMBER = r"(\d+|" + "|".join(_NUMBER_WORDS) + r")"
-
-
-def _to_int(number_text: str) -> int:
-    number_text = number_text.lower()
-    return _NUMBER_WORDS.get(number_text, None) or int(number_text)
 
 
 # "the following four risks were identified:" -- bounded by "following ...:", no explicit target.
 _PATTERN_FOLLOWING_N_NOUN = re.compile(
-    r"\bthe following " + _NUMBER + r"\s+(\w+)\b", re.IGNORECASE
+    r"\bthe following " + NUMBER + r"\s+(\w+)\b", re.IGNORECASE
 )
 # "the four risks below"
 _PATTERN_N_NOUN_BELOW = re.compile(
-    r"\bthe " + _NUMBER + r"\s+(\w+)\s+below\b", re.IGNORECASE
+    r"\bthe " + NUMBER + r"\s+(\w+)\s+below\b", re.IGNORECASE
 )
 # "four risks are listed below" (no leading "the")
 _PATTERN_N_NOUN_ARE_LISTED_BELOW = re.compile(
-    _NUMBER + r"\s+(\w+)\s+are\s+listed\s+below\b", re.IGNORECASE
+    NUMBER + r"\s+(\w+)\s+are\s+listed\s+below\b", re.IGNORECASE
 )
 # "Results for all six regions are reported in Table 5." / "six regions are shown in Table 5"
 _PATTERN_N_NOUN_SHOWN_IN_TARGET = re.compile(
-    r"(?:all\s+)?" + _NUMBER + r"\s+(\w+)\s+(?:are|is)\s+(?:shown|reported)\s+in\s+" + TARGET_GROUP,
+    r"(?:all\s+)?" + NUMBER + r"\s+(\w+)\s+(?:are|is)\s+(?:shown|reported)\s+in\s+" + TARGET_GROUP,
     re.IGNORECASE,
 )
 
@@ -56,7 +45,7 @@ def extract_count_candidates(text: str, document_id: str = "") -> list[Structura
         if not claimed.try_claim(*match.span()):
             continue
 
-        count = _to_int(match.group(1))
+        count = to_int(match.group(1))
         target_kind, target_ident = match.group(3), match.group(4)
         candidates.append(
             StructuralCandidate(
@@ -83,7 +72,7 @@ def extract_count_candidates(text: str, document_id: str = "") -> list[Structura
         for match in pattern.finditer(text):
             if not claimed.try_claim(*match.span()):
                 continue
-            count = _to_int(match.group(1))
+            count = to_int(match.group(1))
             candidates.append(
                 StructuralCandidate(
                     candidate_id=f"count-{order}",
