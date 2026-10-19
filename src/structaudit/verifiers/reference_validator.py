@@ -23,6 +23,7 @@ from structaudit.core import (
     VerificationResult,
 )
 from structaudit.models.semantic_backend import SemanticBackend
+from structaudit.resolution.resolver import kind_has_labels, parse_target_query
 
 # Section 11.2's own thresholds, verbatim.
 _ALIGNMENT_SATISFIED_THRESHOLD = 95
@@ -39,21 +40,26 @@ def _normalize_for_alignment(text: str) -> str:
 
 
 def validate_target_exists(
-    candidate: StructuralCandidate, resolution: TargetResolution
+    candidate: StructuralCandidate, resolution: TargetResolution, indexes: StructuralIndexes | None = None
 ) -> VerificationResult:
-    if resolution.unit_id is None:
-        return VerificationResult(
-            candidate_id=candidate.candidate_id,
-            status=Status.VIOLATED,
-            operations_run=[OperationType.TARGET_EXISTS],
-            expected={"target_query": candidate.target_query},
-            observed={"resolved": False},
-            evidence_unit_ids=[],
-            evidence_text=[],
-            deterministic=True,
-            confidence=1.0,
-            explanation=f"{candidate.target_query!r} does not resolve to any unit in the document.",
-        )
+    """VIOLATED when an explicit reference doesn't resolve, but only where the
+    parser could have found it. If `indexes` is given and the document has no
+    labeled objects of that kind the verdict
+    is UNCERTAIN.
+    """
+    if resolution.unit_id is None and indexes is not None:
+        parsed_query = parse_target_query(candidate.target_query or "")
+        if parsed_query is not None and not kind_has_labels(parsed_query[0], indexes):
+            kind = parsed_query[0].value.lower()
+            return VerificationResult(
+                candidate_id=candidate.candidate_id, status=Status.UNCERTAIN,
+                operations_run=[OperationType.TARGET_EXISTS],
+                expected={"target_query": candidate.target_query},
+                observed={"resolved": False, "labeled_objects_of_kind": 0},
+                evidence_unit_ids=[], evidence_text=[], deterministic=False, confidence=0.0,
+                explanation=(f"{candidate.target_query!r} was not found, but the parser found no labeled "
+                             f"{kind} in this document, so its absence is not evidence."),
+            )
 
     return VerificationResult(
         candidate_id=candidate.candidate_id,
@@ -112,7 +118,7 @@ def validate_structural_alignment(
         expected={"source_text": source_text},
         observed={"target_text": target_text, "similarity": similarity, "semantic_label": label},
         evidence_unit_ids=evidence_unit_ids or [], evidence_text=[target_text],
-        deterministic=False, confidence=semantic_result["score"] / 100,
+        deterministic=False, confidence=semantic_result["confidence"],
         explanation=f"Similarity {similarity:.0f} was ambiguous; semantic check returned {label}.",
     )
 
@@ -193,7 +199,7 @@ def validate_target_topic_match(
         expected={"expected_topic": candidate.expected_topic},
         observed={"resolved_target_text": resolved_target_text, "semantic_label": label, "score": semantic_result["score"]},
         evidence_unit_ids=[resolution.unit_id], evidence_text=[resolved_target_text] if resolved_target_text else [],
-        deterministic=False, confidence=semantic_result["score"] / 100,
+        deterministic=False, confidence=semantic_result["confidence"],
         explanation=f"Topic {candidate.expected_topic!r} vs target text: semantic check returned {label}.",
     )
 

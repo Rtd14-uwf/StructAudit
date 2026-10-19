@@ -144,6 +144,17 @@ class StructuralCandidate(BaseModel):
     rule_confidence: float = Field(ge=0.0, le=1.0)
     parse_confidence: float = Field(ge=0.0, le=1.0)
     rank_score: float = Field(default=0.0, ge=0.0)
+    anchor_char_start: int | None = Field(default=None, ge=0)
+    anchor_char_end: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _check_anchor_span(self) -> "StructuralCandidate":
+        if (self.anchor_char_start is None) != (self.anchor_char_end is None):
+            raise ValueError("anchor_char_start and anchor_char_end must be set together")
+        if self.anchor_char_start is not None and self.anchor_char_end < self.anchor_char_start:
+            raise ValueError("anchor_char_end is before anchor_char_start")
+        return self
+
 
     @model_validator(mode="after")
     def _check_type_specific_required_fields(self) -> "StructuralCandidate":

@@ -84,16 +84,15 @@ class LexicalOverlapBackend(SemanticBackend):
         resolved_target_text = payload["resolved_target_text"]
 
         score = fuzz.token_set_ratio(expected_topic, resolved_target_text)
-
         if score >= _SUPPORTED_THRESHOLD:
-            label = "SUPPORTED"
+            label, confidence = "SUPPORTED", score / 100
         elif score < _NOT_SUPPORTED_THRESHOLD:
-            label = "NOT_SUPPORTED"
+            label, confidence = "NOT_SUPPORTED", (100 - score) / 100
         else:
-            label = "UNCERTAIN"
+            label, confidence = "UNCERTAIN", 0.0
 
         raw_output = {"token_set_ratio": score}
-        parsed_output = {"label": label, "score": score}
+        parsed_output = {"label": label, "score": score, "confidence": confidence}
         return raw_output, parsed_output
 
     def _label_equivalence(self, payload: dict) -> tuple[dict, dict]:

@@ -182,7 +182,87 @@ def extract_lists(tokens, line_offsets: list[int]) -> list[DocumentUnit]:
     return units
 
 
-_TABLE_CAPTION_RE = re.compile(r"^(Table\s+([A-Za-z0-9]+))\.?\s*(.*)$", re.IGNORECASE)
+_TABLE_CAPTION_RE = re.compile(r"^(?i:Table)\s+(\d+(?:\.\d+)*|[A-Z]|[IVXLCDM]+)(?=[.:\s)]|$)")
+
+
+def _normalize_header_cell(cell: str) -> str:
+    return re.sub(r"\W+", " ", cell.lower()).strip()
+
+
+def _is_continuation(reference_headers: list[str], headers: list[str]) -> bool:
+    """Is a table that follows a captioned table a continuation of it?
+
+    The parser emits one TableUnit per physical markdown block, so one logical
+    table can arrive as several: row-wise (the same header repeated after a page
+    break), or column-wise (side-by-side blocks sharing a row-label column). The
+    reference is the first table after the caption. A later table counts as a
+    continuation if its headers are identical, or it has the same number of
+    columns and the same non-blank first header cell. A blank first cell is not
+    allowed to match anything. Anything else is a different table.
+    """
+    if headers == reference_headers:
+        return True
+    if not reference_headers or len(headers) != len(reference_headers):
+        return False
+    first = _normalize_header_cell(reference_headers[0])
+    return bool(first) and first == _normalize_header_cell(headers[0])
+
+
+# A caption can also be a short paragraph holding just the label ("Table 5", or
+# "Table 1" then a title line), with the title as a separate heading and the
+# table after it. That is how the S&P presale reports in the corpus are laid out:
+# 287 of 317 short caption-like paragraphs followed exactly this shape.
+_BLOCK_OPEN_TYPES = {
+    "paragraph_open": "para", "heading_open": "head", "table_open": "table",
+    "bullet_list_open": "list", "ordered_list_open": "list", "fence": "other",
+    "blockquote_open": "other", "html_block": "other", "code_block": "other",
+}
+# Prose that merely starts with a reference ("Table 11 summarizes ...") is not a caption.
+_PROSE_VERB_RE = re.compile(
+    r"\b(shows?|presents?|summari[sz]es?|provides?|lists?|reports?|includes?|contains?|describes?|"
+    r"illustrates?|is|are|was|were|has|have|represents?|displays?)\b",
+    re.IGNORECASE,
+)
+_MAX_LABEL_PARAGRAPH_CHARS = 160
+_MAX_BLOCKS_BETWEEN_LABEL_AND_TABLE = 3
+_MAX_INTERVENING_PARAGRAPH_CHARS = 200
+
+
+def _blocks_after(tokens, index: int):
+    """Yield (kind, text) for each top-level block after the one opening at tokens[index]."""
+    for j in range(index + 1, len(tokens)):
+        t = tokens[j]
+        if t.level != 0 or t.type not in _BLOCK_OPEN_TYPES:
+            continue
+        kind = _BLOCK_OPEN_TYPES[t.type]
+        text = tokens[j + 1].content.strip() if kind in ("para", "head") and j + 1 < len(tokens) else ""
+        yield kind, text
+
+
+def _paragraph_caption(tokens, index: int) -> tuple[str, str] | None:
+    """(label, caption) if the paragraph opening at tokens[index] is a table caption label, else None."""
+    if tokens[index].level != 0 or index + 1 >= len(tokens):
+        return None
+    content = tokens[index + 1].content.strip()
+    first_line = content.split("\n")[0].strip()
+    match = _TABLE_CAPTION_RE.match(first_line)
+    if not match or len(content) > _MAX_LABEL_PARAGRAPH_CHARS or _PROSE_VERB_RE.search(first_line):
+        return None
+
+    title = None
+    for between, (kind, text) in enumerate(_blocks_after(tokens, index)):
+        if kind == "table":
+            caption = " ".join(content.split())
+            return f"Table {match.group(1)}", f"{caption} {title}" if title else caption
+        if between >= _MAX_BLOCKS_BETWEEN_LABEL_AND_TABLE or kind not in ("head", "para"):
+            return None
+        if _TABLE_CAPTION_RE.match(text.split("\n")[0].strip()):
+            return None  # another caption owns whatever table comes next
+        if kind == "para" and len(text) > _MAX_INTERVENING_PARAGRAPH_CHARS:
+            return None
+        if kind == "head" and title is None:
+            title = text
+    return None
 
 
 def extract_tables(tokens, line_offsets: list[int]) -> list[TableUnit]:
@@ -198,6 +278,7 @@ def extract_tables(tokens, line_offsets: list[int]) -> list[TableUnit]:
     tables: list[TableUnit] = []
     order = 0
     last_table_caption_match: tuple[str, str] | None = None
+    caption_table_headers: list[str] | None = None  # headers of the first table after the caption
 
     i = 0
     while i < len(tokens):
@@ -207,7 +288,13 @@ def extract_tables(tokens, line_offsets: list[int]) -> list[TableUnit]:
             heading_text = _inline_text(inline).strip()
             match = _TABLE_CAPTION_RE.match(heading_text)
             if match:
-                last_table_caption_match = (f"Table {match.group(2)}", heading_text)
+                last_table_caption_match = (f"Table {match.group(1)}", heading_text)
+                caption_table_headers = None
+        elif token.type == "paragraph_open":
+            paragraph_caption = _paragraph_caption(tokens, i)
+            if paragraph_caption:
+                last_table_caption_match = paragraph_caption
+                caption_table_headers = None
         elif token.type == "table_open":
             char_start, char_end = _char_span(token.map, line_offsets)
             column_headers: list[str] = []
@@ -235,7 +322,13 @@ def extract_tables(tokens, line_offsets: list[int]) -> list[TableUnit]:
                     current_row.append(t.content)
                 j += 1
 
-            label, caption = last_table_caption_match if last_table_caption_match else (None, None)
+            label, caption = None, None
+            if last_table_caption_match:
+                if caption_table_headers is None:
+                    caption_table_headers = column_headers
+                    label, caption = last_table_caption_match
+                elif _is_continuation(caption_table_headers, column_headers):
+                    label, caption = last_table_caption_match
 
             tables.append(
                 TableUnit(

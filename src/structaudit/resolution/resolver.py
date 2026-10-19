@@ -44,14 +44,27 @@ _KIND_TO_INDEX_FIELD = {
 _RELATIVE_TARGETS = {"following list", "following table"}
 
 
-def _resolve_explicit(target_query: str, indexes: StructuralIndexes) -> TargetResolution | None:
-    """Steps 1/2: normalize the query's identifier and look it up directly."""
+# add after _RELATIVE_TARGETS
+def parse_target_query(target_query: str) -> tuple[ReferenceKind, str] | None:
+    """"Table 7" -> (ReferenceKind.TABLE, "7"); None if it isn't an explicit "Kind Identifier" query."""
     match = _TARGET_GROUP_FULL_MATCH.match(target_query.strip())
     if not match:
         return None
+    return ReferenceKind[match.group(1).upper()], match.group(2)
 
-    kind = ReferenceKind[match.group(1).upper()]
-    identifier = match.group(2)
+
+def kind_has_labels(kind: ReferenceKind, indexes: StructuralIndexes) -> bool:
+    """Did the parser find any labeled object of this kind in the document?"""
+    return bool(getattr(indexes, _KIND_TO_INDEX_FIELD[kind]))
+
+
+def _resolve_explicit(target_query: str, indexes: StructuralIndexes) -> TargetResolution | None:
+    """Steps 1/2: normalize the query's identifier and look it up directly."""
+    parsed_query = parse_target_query(target_query)
+    if parsed_query is None:
+        return None
+
+    kind, identifier = parsed_query
     key = normalize_identifier(kind, identifier)
     index_field = _KIND_TO_INDEX_FIELD[kind]
     unit_id = getattr(indexes, index_field).get(key)
@@ -66,8 +79,11 @@ def _resolve_relative(
     candidate: StructuralCandidate, parsed: ParsedDocument
 ) -> TargetResolution:
     """Step 3: "following list" / "following table" """
-    anchor_position = parsed.raw_text.find(candidate.anchor_text)
-    search_start = anchor_position + len(candidate.anchor_text) if anchor_position >= 0 else 0
+    if candidate.anchor_char_end is not None:
+        search_start = candidate.anchor_char_end
+    else:  # candidate built without a span: fall back to the first occurrence of its text
+        anchor_position = parsed.raw_text.find(candidate.anchor_text)
+        search_start = anchor_position + len(candidate.anchor_text) if anchor_position >= 0 else 0
 
     if candidate.target_query == "following table":
         candidates_in_order = [t for t in parsed.tables if (t.char_start or 0) >= search_start]

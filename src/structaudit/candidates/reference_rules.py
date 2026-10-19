@@ -77,6 +77,8 @@ def extract_reference_candidates(
                 document_id=document_id,
                 anchor_unit_id="",  # no sentence-level unit to anchor to yet
                 anchor_text=mention.raw_text,
+                anchor_char_start=mention.char_start,
+                anchor_char_end=mention.char_end,
                 candidate_type=CandidateType.REFERENCE,
                 target_query=mention.raw_text,
                 target_kind=mention.kind.value,
